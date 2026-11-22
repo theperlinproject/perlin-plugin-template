@@ -1,0 +1,135 @@
+name: build
+
+# Builds the plugin on Linux, Windows and macOS for both wasm64 (Emscripten) and wasm32 (wasi-sdk).
+# Every run uploads the built plugin as a downloadable artifact (Actions tab -> the run -> Artifacts).
+# Pushing a tag like v1.0.0 also publishes a GitHub Release with the plugin zipped and ready to drop into mods/.
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  EMSDK_VERSION: latest     # pin (e.g. 4.0.20) if a new Emscripten release ever breaks your build
+  WASI_SDK_VERSION: "34"    # wasi-sdk 25 or newer
+
+jobs:
+  build:
+    name: ${{ matrix.target }} / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The .wasm is the same on every OS; the matrix proves the project builds everywhere.
+        # Drop windows/macos here to save CI minutes (macOS minutes cost more on private repos).
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        target: [wasm64, wasm32]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Ninja
+        run: python -m pip install ninja
+
+      - name: Install Emscripten
+        if: matrix.target == 'wasm64'
+        uses: mymindstorm/setup-emsdk@v15
+        with:
+          version: ${{ env.EMSDK_VERSION }}
+          actions-cache-folder: emsdk-cache
+
+      - name: Locate Emscripten
+        if: matrix.target == 'wasm64'
+        run: |
+          root="${EMSDK:-}"
+          if [ -z "$root" ]; then root="$(cd "$(dirname "$(command -v emcc)")/../.." && pwd)"; fi
+          if [ "$RUNNER_OS" = Windows ]; then root="$(cygpath -m "$root")"; fi
+          test -f "$root/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+          echo "EMSDK=$root" >> "$GITHUB_ENV"
+          emcc --version | head -1
+
+      - name: Install wasi-sdk
+        if: matrix.target == 'wasm32'
+        run: |
+          case "$RUNNER_OS-$RUNNER_ARCH" in
+            Linux-X64)   plat=x86_64-linux ;;
+            Linux-ARM64) plat=arm64-linux ;;
+            macOS-ARM64) plat=arm64-macos ;;
+            macOS-X64)   plat=x86_64-macos ;;
+            Windows-X64) plat=x86_64-windows ;;
+            *) echo "no wasi-sdk build for $RUNNER_OS-$RUNNER_ARCH"; exit 1 ;;
+          esac
+          name="wasi-sdk-${WASI_SDK_VERSION}.0-${plat}"
+          tmp="$RUNNER_TEMP"
+          if [ "$RUNNER_OS" = Windows ]; then tmp="$(cygpath -u "$tmp")"; fi
+          curl -fsSL -o "$tmp/wasi-sdk.tar.gz" \
+            "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/${name}.tar.gz"
+          tar -xzf "$tmp/wasi-sdk.tar.gz" -C "$tmp"
+          path="$tmp/$name"
+          if [ "$RUNNER_OS" = Windows ]; then path="$(cygpath -m "$path")"; fi
+          echo "WASI_SDK_PATH=$path" >> "$GITHUB_ENV"
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.target }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.target }}
+
+      - name: Collect plugin files
+        run: |
+          dir="build/${{ matrix.target }}"
+          id="$(sed -n 's/^CMAKE_PROJECT_NAME:STATIC=//p' "$dir/CMakeCache.txt")"
+          mkdir -p dist
+          cp "$dir/$id.wasm" dist/
+          for ext in json png; do
+            if [ -f "$dir/$id.$ext" ]; then cp "$dir/$id.$ext" dist/; fi
+          done
+          ls -l dist
+
+      - name: Upload artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+
+  release:
+    name: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Package
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          manifest_version="$(python3 -c 'import json; print(json.load(open("plugin.json")).get("version", ""))')"
+          if [ "${tag#v}" != "$manifest_version" ]; then
+            echo "::warning::tag $tag does not match plugin.json version $manifest_version"
+          fi
+          id="$(basename artifacts/wasm64/*.wasm .wasm)"
+          mkdir -p release
+          (cd artifacts/wasm64 && zip -r "../../release/${id}-${tag}.zip" .)
+          (cd artifacts/wasm32 && zip -r "../../release/${id}-${tag}-wasm32.zip" .)
+          ls -l release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*.zip
+          generate_release_notes: true

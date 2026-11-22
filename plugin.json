@@ -1,0 +1,12 @@
+{
+  "name": "My Plugin",
+  "description": "A Perlin plugin made from the template.",
+  "version": "1.0.0",
+  "author": "You",
+  "website": "https://github.com/you/your-plugin",
+  "permissions": [],
+  "settings": [
+    {"type": "header", "label": "Display"},
+    {"id": "show_text", "type": "toggle", "label": "Show HUD text", "default": true}
+  ]
+}

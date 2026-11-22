@@ -1,0 +1,41 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {"major": 3, "minor": 24, "patch": 0},
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "wasm64",
+      "inherits": "base",
+      "displayName": "wasm64 (Emscripten)",
+      "description": "64-bit plugin, the default. Needs emsdk activated (EMSDK set).",
+      "toolchainFile": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+    },
+    {
+      "name": "wasm32",
+      "inherits": "base",
+      "displayName": "wasm32 (wasi-sdk)",
+      "description": "32-bit plugin. Needs WASI_SDK_PATH pointing at wasi-sdk 25 or newer.",
+      "toolchainFile": "$env{WASI_SDK_PATH}/share/cmake/wasi-sdk.cmake"
+    },
+    {
+      "name": "check",
+      "inherits": "base",
+      "displayName": "Native compile check",
+      "description": "Compiles the plugin with your desktop compiler for errors and code completion. Makes no .wasm."
+    }
+  ],
+  "buildPresets": [
+    {"name": "wasm64", "configurePreset": "wasm64"},
+    {"name": "wasm32", "configurePreset": "wasm32"},
+    {"name": "check", "configurePreset": "check"}
+  ]
+}
