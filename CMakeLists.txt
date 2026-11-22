@@ -27,6 +27,13 @@ if(EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI")
         SOURCES ${PLUGIN_SOURCES}
         MANIFEST ${PLUGIN_MANIFEST})
     target_include_directories(${PLUGIN_ID} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+    # -mexec-model is a link-time flag; newer clang (wasi-sdk 34+) rejects it when only compiling.
+    # perlin_api_add_plugin also passes it to the linker, which is where it takes effect.
+    get_target_property(_plugin_copts ${PLUGIN_ID} COMPILE_OPTIONS)
+    if(_plugin_copts)
+        list(REMOVE_ITEM _plugin_copts -mexec-model=reactor)
+        set_property(TARGET ${PLUGIN_ID} PROPERTY COMPILE_OPTIONS ${_plugin_copts})
+    endif()
     if(EXISTS "${PLUGIN_ICON}")
         add_custom_command(TARGET ${PLUGIN_ID} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different "${PLUGIN_ICON}" "$<TARGET_FILE_DIR:${PLUGIN_ID}>/${PLUGIN_ID}.png"
