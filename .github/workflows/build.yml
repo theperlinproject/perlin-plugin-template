@@ -72,10 +72,16 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then tmp="$(cygpath -u "$tmp")"; fi
           curl -fsSL -o "$tmp/wasi-sdk.tar.gz" \
             "https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-${WASI_SDK_VERSION}/${name}.tar.gz"
-          tar -xzf "$tmp/wasi-sdk.tar.gz" -C "$tmp"
-          path="$tmp/$name"
+          mkdir -p "$tmp/wasi-sdk"
+          tar -xzf "$tmp/wasi-sdk.tar.gz" -C "$tmp/wasi-sdk"
+          # Find the folder that holds bin/clang rather than guessing the tarball's folder name.
+          clang="$(find "$tmp/wasi-sdk" -maxdepth 3 -path '*/bin/clang' -o -maxdepth 3 -path '*/bin/clang.exe' | head -1)"
+          if [ -z "$clang" ]; then echo "no bin/clang in the wasi-sdk tarball:"; ls -R "$tmp/wasi-sdk" | head -50; exit 1; fi
+          path="$(dirname "$(dirname "$clang")")"
+          test -d "$path/share/wasi-sysroot"
           if [ "$RUNNER_OS" = Windows ]; then path="$(cygpath -m "$path")"; fi
           echo "WASI_SDK_PATH=$path" >> "$GITHUB_ENV"
+          "$clang" --version | head -1
 
       - name: Configure
         run: cmake --preset ${{ matrix.target }}

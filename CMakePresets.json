@@ -1,6 +1,10 @@
 {
   "version": 6,
-  "cmakeMinimumRequired": {"major": 3, "minor": 24, "patch": 0},
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
   "configurePresets": [
     {
       "name": "base",
@@ -24,7 +28,7 @@
       "inherits": "base",
       "displayName": "wasm32 (wasi-sdk)",
       "description": "32-bit plugin. Needs WASI_SDK_PATH pointing at wasi-sdk 25 or newer.",
-      "toolchainFile": "$env{WASI_SDK_PATH}/share/cmake/wasi-sdk.cmake"
+      "toolchainFile": "${sourceDir}/cmake/wasi-toolchain.cmake"
     },
     {
       "name": "check",
@@ -34,8 +38,17 @@
     }
   ],
   "buildPresets": [
-    {"name": "wasm64", "configurePreset": "wasm64"},
-    {"name": "wasm32", "configurePreset": "wasm32"},
-    {"name": "check", "configurePreset": "check"}
+    {
+      "name": "wasm64",
+      "configurePreset": "wasm64"
+    },
+    {
+      "name": "wasm32",
+      "configurePreset": "wasm32"
+    },
+    {
+      "name": "check",
+      "configurePreset": "check"
+    }
   ]
 }
